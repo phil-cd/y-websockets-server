@@ -58,16 +58,19 @@ function getInstanceOfY (room) {
 
 io.on('connection', function (socket) {
   var rooms = []
-  socket.on('joinRoom', function (room) {
-    log('User "%s" joins room "%s"', socket.id, room)
-    socket.join(room)
-    getInstanceOfY(room).then(function (y) {
-      global.y = y // TODO: remove !!!
-      if (rooms.indexOf(room) === -1) {
-        y.connector.userJoined(socket.id, 'slave')
-        rooms.push(room)
-      }
-    })
+  socket.on('joinRoom', function (room, passphrase) {
+    if(passphrase != '1234') socket.disconnect();
+    else {
+      log('User "%s" joins room "%s"', socket.id, room)
+      socket.join(room)
+      getInstanceOfY(room).then(function (y) {
+        global.y = y // TODO: remove !!!
+        if (rooms.indexOf(room) === -1) {
+          y.connector.userJoined(socket.id, 'slave')
+          rooms.push(room)
+        }
+      })
+    }
   })
   socket.on('yjsEvent', function (msg) {
     if (msg.room != null) {
