@@ -3,6 +3,7 @@
 'use strict'
 
 var Y = require('yjs')
+const fetch = require('node-fetch')
 
 Y.debug.log = console.log.bind(console)
 
@@ -11,7 +12,7 @@ var minimist = require('minimist')
 require('y-memory')(Y)
 try {
   require('y-leveldb')(Y)
-} catch (err) {}
+} catch (err) { }
 
 try {
   // try to require local y-websockets-server
@@ -56,11 +57,47 @@ function getInstanceOfY (room) {
   return global.yInstances[room]
 }
 
-io.on('connection', function (socket) {
+io.on('connection', async function (socket) {
   var rooms = []
-  socket.on('joinRoom', function (room, passphrase) {
-    if(passphrase != '1234') socket.disconnect();
-    else {
+  socket.on('joinRoom', async function (room, authInfo) {
+    if (room.startsWith('projects_')) {
+      let system = room.split('_')[1]
+      let projectName = room.split('_')[2]
+
+      const response = await fetch('http://127.0.0.1:8080/projects/' + system + '/' + projectName, {
+        method: 'GET',
+        headers: {
+          'access-token': authInfo.accessToken,
+          'authorization': 'Basic ' + authInfo.basicAuth,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const isMember = data.is_member
+        if (isMember) {
+          // user has access to project
+          log('User "%s" joins room "%s"', socket.id, room)
+          socket.join(room)
+          getInstanceOfY(room).then(function (y) {
+            global.y = y // TODO: remove !!!
+            if (rooms.indexOf(room) === -1) {
+              y.connector.userJoined(socket.id, 'slave')
+              rooms.push(room)
+            }
+          })
+        } else {
+          // user is no member
+          socket.disconnect()
+        }
+      } else {
+        console.log('errorcode: ' + response.status)
+        // user has no access to project
+        socket.disconnect()
+      }
+    } else {
+      // currently: allow other room names to be open for everyone
       log('User "%s" joins room "%s"', socket.id, room)
       socket.join(room)
       getInstanceOfY(room).then(function (y) {
